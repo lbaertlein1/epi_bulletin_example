@@ -17,10 +17,13 @@ pacman::p_load(knitr,
                rio,
                here,
                kableExtra,
+               grid,
                gridExtra, 
                flextable,
                sf,
-               glue)
+               glue, 
+               officer,
+               cowplot)
 
 #Load functions: 
 source("code/funcs.R")
@@ -39,8 +42,11 @@ maternal_deaths_linelist_clean <- maternal_deaths_linelist %>%
   mutate_at(c("date_of_death", "date_of_notification"),  ~suppressWarnings(case_when(!is.na(as.Date(as.numeric(.), origin="1899-12-30")) ~ as.Date(as.numeric(.), origin="1899-12-30"),
                                     TRUE ~ parse_date_time(., orders=c("dmy", "mdy"))))) %>%
  mutate(age = as.numeric(age)) %>% #Convert age to numeric
-  mutate_at(c("primary_cause_of_death", "short_name", "province"), ~stringr::str_to_sentence(tolower(.))) #format text strings for consistency
-  
+  mutate_at(c("primary_cause_of_death", "short_name", "province"), ~stringr::str_to_sentence(tolower(.))) %>% #format text strings for consistency
+  mutate(short_name = case_when(short_name == "Non-obstetric complication" ~ "Non-obstetric complications",
+                                short_name == "Obstetric hemorrhage" ~ "Obstetric haemorrhage",
+                                TRUE ~ short_name)) 
+
 maternal_deaths_summary_clean <- maternal_deaths_summary %>%
   janitor::clean_names() %>%
   rename(this_week_total = x2,
@@ -49,7 +55,8 @@ maternal_deaths_summary_clean <- maternal_deaths_summary %>%
   mutate(cumulative_deaths = rowSums(cbind(this_week_total, prior_total), na.rm = TRUE)) %>% #Combine this week's total with prior cumulative total
   select(province, cumulative_deaths) %>%
   mutate(province = stringr::str_to_title(tolower(province))) %>% #format province name for consistency
-  filter(province != "Total") #Remove total row
+  filter(province != "Total") %>% #Remove total row
+  arrange(desc(cumulative_deaths))
 
 measles_lab_clean <- measles_lab %>%
   janitor::clean_names() %>%
@@ -62,7 +69,7 @@ measles_lab_clean <- measles_lab %>%
                                                           . == 5 ~ "Pending",
                                                           . == 9 ~ "Unknown",
                                                           TRUE ~ "Unknown")) %>%
-  mutate_at(c("ig_m_results", "rubella_ig_m"), ~factor(., levels=c("Positive", "Pending", "Not done", "Negative", "Indeterminate", "Unknown"))) %>%
+  mutate_at(c("ig_m_results", "rubella_ig_m"), ~factor(., levels=c("Unknown", "Indeterminate", "Negative", "Not done", "Pending", "Positive"))) %>%
   arrange(province_of_residence, ig_m_results) %>%
   select(province_of_residence, ig_m_results)
 
@@ -247,9 +254,8 @@ colnames(weekly_data_summary_table) <- c(
 
 # Create Flextable with Two Header Rows
 table1 <- flextable(weekly_data_summary_table) %>%
+  set_table_properties(width = 1, layout = "fixed") %>%
   theme_box() %>%
-  set_table_properties(width = 1, layout = "autofit") %>%
-  
   # First row: Merge "Week X" and "Cumulative Total"
   add_header_row(
     values = c(" ", paste0("Week ", params$epiweek), paste0("Week 1 to ", params$epiweek, ", Cumulative Total")),
@@ -268,8 +274,14 @@ table1 <- flextable(weekly_data_summary_table) %>%
   
   # Style the table
   bold(part = "header") %>%
-  align(align = "center", part = "all") %>%
+  color(part="header", color="white") %>%
+  align(part="all", align = "center") %>%
+  align(j=1, align="left", part="body") %>%
   bg(part = "header", bg = "#f79646") %>%
+  bold(j = 1, part = "body") %>%
+  color(j = 1, color = "white", part = "body") %>%
+  bg(j = 1, bg = "#f79646", part = "body") %>%
+  border(border = officer::fp_border(color="white"), part="all") %>%
   fontsize(size = 10, part = "all") %>%
   autofit()
 
@@ -316,9 +328,47 @@ flextable(sub_header_data) %>%
 
 ```
 
-  - The country has recorded a total of X suspected measles cases in `r params$year`
-  - From the X measles specimen that have been tested, X have been confirmed positive (PR X.X %)
-  -
+```{r measles_plot, fig.width=7.5, fig.height=2.5, out.width="100%", out.height="100%"}
+measles_lab_summary <- measles_lab_clean %>%
+  group_by(province_of_residence, ig_m_results) %>%
+  summarise(total = n()) %>%
+  ungroup() 
+
+measles_plot <- ggplot(data=measles_lab_summary) +
+  geom_col(aes(x=province_of_residence, y=total, group=ig_m_results, fill=ig_m_results), position="stack") +
+  scale_fill_manual(values=c("Positive" = "#ff0000",
+                             "Pending" = "#6a477a",
+                             "Not done" = "#bebebe",
+                             "Negative" = "#0909ff",
+                             "Indeterminate" = "#699c68",
+                             "Unknown" = "black")) +
+  theme_classic() +
+  theme(legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.x = element_text(angle=90, hjust=1),
+        panel.grid.major = element_line(color="grey90", linetype="dashed"),
+        plot.margin = margin(30, 10, 30, 10),
+         text = element_text(family = "Arial", size = 10))  # Set font for plot)
+
+# Create a Single-Cell TableGrob with Text
+measles_bullet1 <- paste0("The country has recorded a total of ", sum(as.numeric(cumulative_weekly_data$Suspected[cumulative_weekly_data$disease == "Measles"]), na.rm=T), " suspected measles cases in ", params$year,".\n")
+measles_bullet2 <- paste0("From the ", sum(as.numeric(measles_lab_summary$total), na.rm=T), " measles specimen that have been tested, ", sum(as.numeric(measles_lab_summary$total[measles_lab_summary$ig_m_results=="Positive"]), na.rm=T), " have been confirmed positive (PR ", round(sum(as.numeric(measles_lab_summary$total[measles_lab_summary$ig_m_results=="Positive"]), na.rm=T)/sum(as.numeric(measles_lab_summary$total), na.rm=T),3)*100,"%)")
+
+
+# Wrap the text bullets to fit within the allocated space
+measles_bullet1_wrapped <- wrap_text_hanging(measles_bullet1, width = 50)
+measles_bullet2_wrapped <- wrap_text_hanging(measles_bullet2, width = 50)
+
+text_grob <- tableGrob(
+  matrix(c(measles_bullet1_wrapped, measles_bullet2_wrapped), ncol = 1), 
+  theme = ttheme_minimal(
+  core = list(fg_params = list(fontsize = 10, fontfamily = "Arial", hjust=0, x=0))
+))
+
+cowplot::plot_grid(text_grob, measles_plot, align="h", nrow=1, rel_widths = c(4.5, 4))
+
+```
 
 ```{r sub_header5, echo=FALSE}
 sub_header_data <- data.frame(
@@ -339,9 +389,87 @@ flextable(sub_header_data) %>%
 
 ```
 
-**barchart and map go here**
+```{r maternal_deaths_subheader}
+sub_header_data <- data.frame(
+  Col1 = c("",  
+           paste0("Causes of maternal death (Week ", params$epiweek, ", n=", length(unique(maternal_deaths_linelist_clean$case_id)), ")")
+  ),
+  Col2 = c("",
+           paste0("Cumulative distribution of maternal deaths (", params$year, ") by province"))  
+)
 
-- The bar chart on the left summarizes the causes of deaths of X maternal deaths recorded in week `r params$epiweek`.
-- X, Y, and Z continue to be the leading causes of maternal deaths this year.
-- Cumulatively, in `r params$year`, X maternal deaths have been recorded across teh country, as depicted on the map.
-- Provinces with darker shades (x, Y, and Z) indicate those with a higher number of reported mathernal deaths.",
+flextable(sub_header_data) %>%
+  set_table_properties(layout = "fixed") %>%  
+  width(j = 1:2, width = 3.75) %>%  # Each column gets half of 7.5 inches
+  height(i = 1, height = 0.05) %>%  # Reduce height of first row
+  bg(i = 2, j = 1:2, bg = "#f79646") %>%  # Light orange background for second row
+  color(i = 2, j = 1:2, color = "white") %>%  # White text
+  border(border = officer::fp_border(color="white"), part="all") %>%
+  bold(i = 2, j = 1:2) %>%
+  fontsize(i = 2, j = 1:2, size = 12) %>%  # Adjust text size
+  align(i = 2, j = 1:2, align = "center") %>%
+  delete_part(part = "header")  # Remove column headers
+```
+
+```{r maternal_deaths_plot}
+maternal_deaths_plot_data <-  maternal_deaths_linelist_clean %>%
+  group_by(short_name) %>%
+  summarise(total = n()) %>%
+  ungroup() %>%
+  mutate(pct = total / sum(total, na.rm=T)) %>%
+  arrange(pct)
+
+maternal_deaths_plot_data <- maternal_deaths_plot_data %>%
+  mutate(short_name = factor(short_name, levels=maternal_deaths_plot_data$short_name))
+  
+maternal_death_plot <- ggplot(data = maternal_deaths_plot_data,
+       aes(x=short_name, y=total)) +
+  geom_col(fill="#65adc2") +
+  geom_text(aes(label = scales::percent(pct, accuracy = 1)), 
+            position = position_nudge(y = max(maternal_deaths_plot_data$total) * 0.04),  # Nudge labels outside
+            hjust = 0,  # Align text left (outside the bars)
+            size = 2.5) +  # Adjust text size for better readability
+  theme_classic() +
+  coord_flip() +
+  labs(y="# of maternal deaths") +
+  theme(axis.title.y=element_blank(),
+        panel.grid.major = element_line(color="grey90", linetype="dashed")) +
+  scale_y_continuous(limits=c(0, max(maternal_deaths_plot_data$total, na.rm=T)+0.5))
+
+```
+
+```{r maternal_deaths_map}
+map_data <- maternal_deaths_summary_clean %>%
+  mutate(province = case_when(province == "North Western" ~ "North-Western",
+                              TRUE ~ province)) %>%
+  full_join(province_shapes, by=c("province" = "ADM1_EN")) %>%
+  mutate(label = paste0(province, "(", cumulative_deaths,")")) %>%
+  sf::st_as_sf()
+
+maternal_death_map <-ggplot(data = map_data) +
+  geom_sf(aes(fill = cumulative_deaths)) +
+  geom_sf_text(aes(label=label), size=3) +
+  scale_fill_gradient(low="white", high="#000eb9")+
+  theme_void() +  # Removes all non-data elements
+  theme(
+    legend.position = c(0.05, 0.95),  # Move legend to top-left (inside)
+    legend.justification = c(0, 1),  # Align legend's top-left corner
+    legend.background = element_rect(fill = alpha("white", 0), color = NA),  
+    legend.key.height = unit(0.15, "in"),  # Reduce legend height
+    legend.key.width = unit(0.1, "in"),  # Make legend narrower
+    legend.text = element_text(size = 7),  # Reduce text size of legend values
+    legend.title = element_text(size = 7),  # Reduce text size of legend title
+    plot.margin = margin(10, 10, 10, 10) 
+  ) +
+  labs(fill="Cumulative Maternal Deaths")
+
+```
+
+```{r maternal_deaths_plot_grid, fig.width=7.5, fig.height=3, out.width="100%", out.height="100%"}
+cowplot::plot_grid(maternal_death_plot, maternal_death_map, align="h", nrow=1, rel_widths = c(4, 4.5))
+```
+  
+- The bar chart on the left summarizes the causes of deaths of `r length(unique(maternal_deaths_linelist_clean$case_id))` maternal deaths recorded in week `r params$epiweek`.
+- Hypertensive disorder, Non-obstetric complications, and Obstetric haemorrhage continue to be the leading causes of maternal deaths this year. 
+- Cumulatively, in `r params$year`, `r sum(maternal_deaths_summary_clean$cumulative_deaths, na.rm=T)` maternal deaths have been recorded across the country, as depicted on the map.
+- Provinces with darker shades (`r maternal_deaths_summary_clean$province[1]`, `r maternal_deaths_summary_clean$province[2]`, and `r maternal_deaths_summary_clean$province[3]`) indicate those with a higher number of reported maternal deaths.
