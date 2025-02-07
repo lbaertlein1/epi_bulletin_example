@@ -1,0 +1,158 @@
+---
+output: word_document
+params:
+  epiweek: 34
+  year: 2024 
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+pacman::p_load(knitr,
+               tidyverse,
+               ggplot2,
+               rio,
+               here,
+               kableExtra,
+               gridExtra, 
+               flextable)
+
+#Load functions: 
+source("code/funcs.R")
+
+#Get the start and end dates from the epiweek and year parameters
+start_date <- as.Date(paste(params$year, params$epiweek-1, 1, sep = "-"), format = "%Y-%U-%u") #Lag week by 1 to get the date range of the report
+end_date <- start_date + 6 
+
+#Format the date for the report header. 
+## If start and end dates are in the same month, then display as "Xth - Ynd, Month, Year".
+## If start and end dates are in different months, then display as "Xth Month - Ynd Month, Year"
+if(format(start_date, "%b") == format(end_date, "%b")){
+  report_date_range <- paste0(add_ordinal_suffix(as.numeric(format(start_date, "%d"))), " - ", add_ordinal_suffix(as.numeric(format(end_date, "%d"))), ", ",format(end_date, "%b"),", ",format(end_date, "%Y"))
+} else{
+  report_date_range <- paste0(add_ordinal_suffix(as.numeric(format(start_date, "%d")))," ", format(start_date, "%b"), " - ", add_ordinal_suffix(as.numeric(format(end_date, "%d")))," ", format(end_date, "%b"),", ",format(end_date, "%Y"))
+}
+
+```
+
+```{r header_table, echo=FALSE}
+header_data <- data.frame(
+  Week = c(paste("Week", params$epiweek), ""),
+  Title = c("Epidemiological Bulletin", ""),
+  DateRange = c(report_date_range, "")
+)
+
+flextable(header_data) %>%
+  set_table_properties(layout = "fixed") %>%  # Use fixed layout for precise column control
+  width(j = 1, width = 2) %>%  # Set left column width
+  width(j = 2, width = 3.5) %>%  # Set middle column wider for centering
+  width(j = 3, width = 2) %>%  # Set right column width
+  bg(i = 1, j = 1:3, bg = "#135c2c") %>%  # Dark Green Background for first row
+  color(i = 1, j = 1:3, color = "white") %>%  # White Text in first row
+  bold(i = 1, j = 1:3) %>%
+  align(i = 1, j = 1, align = "left") %>%
+  align(i = 1, j = 2, align = "center") %>%  # Center Title in its cell
+  align(i = 1, j = 3, align = "right") %>%
+  valign(i = 1, j = 1:3, valign = "center") %>%  # Ensure vertical centering
+  border_remove() %>%
+  delete_part(part = "header")
+
+```
+
+```{r sub_header1, echo=FALSE}
+sub_header_data <- data.frame(
+  Title = "Summary"
+  )
+
+flextable(sub_header_data) %>%
+  set_table_properties(layout = "fixed") %>%  
+  width(j=1, width=7.5) %>%
+  bg(i = 1, j = 1, bg = "#92d050") %>%  # Light Green Background
+  color(i = 1, j = 1, color = "black") %>%  # Black Text
+  bold(i = 1, j = 1) %>%
+  align(i = 1, j = 1, align = "center") %>%
+  border_remove() %>%
+  delete_part(part = "header")
+
+```
+
+**Immediately Notifiable Diseases and Events**
+
+  - **AFP** :
+  - **Anthrax** :
+  - **Cholera** :
+  - **Measles** :
+  
+**Other Diseases and Events**
+
+  - **Non-bloody Diarrhoea** :
+  - **Malaria** :
+  - **Typhoid Fever** :
+  
+```{r sub_header2, echo=FALSE}
+sub_header_data <- data.frame(
+  Title = "Summary Report Priority Diseases, Conditions, and Events"
+  )
+
+flextable(sub_header_data) %>%
+  set_table_properties(layout = "fixed") %>%  
+  width(j=1, width=7.5) %>%
+  bg(i = 1, j = 1, bg = "#92d050") %>%  # Light Green Background
+  color(i = 1, j = 1, color = "black") %>%  # Black Text
+  bold(i = 1, j = 1) %>%
+  align(i = 1, j = 1, align = "center") %>%
+  border_remove() %>%
+  delete_part(part = "header")
+
+```
+
+**Table goes here**
+
+```{r page_break, results="asis", echo=FALSE}
+cat("<w:p><w:r><w:br w:type='page'/></w:r></w:p>")
+```
+
+```{r sub_header3, echo=FALSE}
+sub_header_data <- data.frame(
+  Title = "Summary of VPD Surveillance Indicators"
+  )
+
+flextable(sub_header_data) %>%
+  set_table_properties(layout = "fixed") %>%  
+  width(j=1, width=7.5) %>%
+  bg(i = 1, j = 1, bg = "#92d050") %>%  # Light Green Background
+  color(i = 1, j = 1, color = "black") %>%  # Black Text
+  bold(i = 1, j = 1) %>%
+  align(i = 1, j = 1, align = "center") %>%
+  border_remove() %>%
+  delete_part(part = "header")
+
+```
+
+  - The country has recorded a total of X suspected measles cases in `r params$year`
+  - From the X measles specimen that have been tested, X have been confirmed positive (PR X.X %)
+  -
+
+```{r sub_header4, echo=FALSE}
+sub_header_data <- data.frame(
+  Title = "Maternal Deaths"
+  )
+
+flextable(sub_header_data) %>%
+  set_table_properties(layout = "fixed") %>%  
+  width(j=1, width=7.5) %>%
+  bg(i = 1, j = 1, bg = "#92d050") %>%  # Light Green Background
+  color(i = 1, j = 1, color = "black") %>%  # Black Text
+  bold(i = 1, j = 1) %>%
+  align(i = 1, j = 1, align = "center") %>%
+  border_remove() %>%
+  delete_part(part = "header")
+
+```
+
+**barchart and map go here**
+
+- The bar chart on the left summarizes the causes of deaths of X maternal deaths recorded in week `r params$epiweek`.
+- X, Y, and Z continue to be the leading causes of maternal deaths this year.
+- Cumulatively, in `r params$year`, X maternal deaths have been recorded across teh country, as depicted on the map.
+- Provinces with darker shades (x, Y, and Z) indicate those with a higher number of reported mathernal deaths.",
