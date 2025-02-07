@@ -1,5 +1,8 @@
 ---
-output: word_document
+output: 
+  word_document:
+    reference_docx: template.docx
+fontsize: 10pt
 params:
   epiweek: 34
   year: 2024 
@@ -15,11 +18,76 @@ pacman::p_load(knitr,
                here,
                kableExtra,
                gridExtra, 
-               flextable)
+               flextable,
+               sf,
+               glue)
 
 #Load functions: 
 source("code/funcs.R")
 
+#Load Data:
+maternal_deaths_linelist <- rio::import("data/Maternal deaths.xlsx", which="MD linelist")
+maternal_deaths_summary <- rio::import("data/Maternal deaths.xlsx", which="MD summary")
+measles_lab <- rio::import("data/measles_lab.xlsx", which="Sheet1")
+weekly_data_by_province <- rio::import("data/weekly_data_by_province.csv")
+province_shapes <- sf::read_sf("data/shapefiles/zmb_admbnda_adm1_dmmu_20201124.shp")
+
+#Basic data tidying
+maternal_deaths_linelist_clean <- maternal_deaths_linelist %>%
+  janitor::clean_names() %>%
+  #Clean date formats
+  mutate_at(c("date_of_death", "date_of_notification"),  ~suppressWarnings(case_when(!is.na(as.Date(as.numeric(.), origin="1899-12-30")) ~ as.Date(as.numeric(.), origin="1899-12-30"),
+                                    TRUE ~ parse_date_time(., orders=c("dmy", "mdy"))))) %>%
+ mutate(age = as.numeric(age)) %>% #Convert age to numeric
+  mutate_at(c("primary_cause_of_death", "short_name", "province"), ~stringr::str_to_sentence(tolower(.))) #format text strings for consistency
+  
+maternal_deaths_summary_clean <- maternal_deaths_summary %>%
+  janitor::clean_names() %>%
+  rename(this_week_total = x2,
+         prior_total = x5,
+         province = maternal_death_cumulative) %>%
+  mutate(cumulative_deaths = rowSums(cbind(this_week_total, prior_total), na.rm = TRUE)) %>% #Combine this week's total with prior cumulative total
+  select(province, cumulative_deaths) %>%
+  mutate(province = stringr::str_to_title(tolower(province))) %>% #format province name for consistency
+  filter(province != "Total") #Remove total row
+
+measles_lab_clean <- measles_lab %>%
+  janitor::clean_names() %>%
+  mutate_at(c("date_of_onset", "date_blood_specimen_collected", "date_specimen_received_in_lab"),  ~suppressWarnings(case_when(!is.na(as.Date(as.numeric(.), origin="1899-12-30")) ~ as.Date(as.numeric(.), origin="1899-12-30"),
+                                    TRUE ~ parse_date_time(., orders=c("dmy", "mdy"))))) %>%
+  mutate_at(c("ig_m_results", "rubella_ig_m"), ~case_when(. == 1 ~ "Positive",
+                                                          . == 2 ~ "Negative",
+                                                          . == 3 ~ "Indeterminate",
+                                                          . == 4 ~ "Not done",
+                                                          . == 5 ~ "Pending",
+                                                          . == 9 ~ "Unknown",
+                                                          TRUE ~ "Unknown")) %>%
+  mutate_at(c("ig_m_results", "rubella_ig_m"), ~factor(., levels=c("Positive", "Pending", "Not done", "Negative", "Indeterminate", "Unknown"))) %>%
+  arrange(province_of_residence, ig_m_results) %>%
+  select(province_of_residence, ig_m_results)
+
+weekly_data_by_province_clean <- weekly_data_by_province %>%
+  janitor::clean_names() %>%
+  pivot_longer(cols=-c("org_unit_name", "period")) %>%
+  mutate(category = case_when(grepl("confirmed", name) ~ "Confirmed",
+                             grepl("sent_to_lab", name) ~ "Tested",
+                             grepl("suspected", name) ~ "Suspected",
+                             TRUE ~ NA_character_)) %>%
+mutate(disease = str_remove_all(name, c("_confirmed|_sent_to_lab|_suspected"))) %>%
+mutate(disease = case_when(disease == "afp" ~ "AFP",
+                           disease %in% c("diarrhoea_non_bloody", "diarrhoea_non_bloodyed") ~ "Non-bloody Diarrhoea",
+                           TRUE ~ str_to_title(str_replace_all(disease, "_", " ")))) %>%
+  select(-c("name")) %>%
+  pivot_wider(names_from = c("category"), values_from = c("value"), values_fill=0) %>%
+  mutate(
+    year = as.integer(substr(period, 1, 4)),  # Extract year
+    week = as.integer(substr(period, 6, nchar(period))),  # Extract week number
+    period2 = lubridate::epiweek(as.Date(ISOdate(year, 1, 1)) + weeks(week - 1))
+  )
+
+```
+
+```{r header_table, echo=FALSE}
 #Get the start and end dates from the epiweek and year parameters
 start_date <- as.Date(paste(params$year, params$epiweek-1, 1, sep = "-"), format = "%Y-%U-%u") #Lag week by 1 to get the date range of the report
 end_date <- start_date + 6 
@@ -33,23 +101,21 @@ if(format(start_date, "%b") == format(end_date, "%b")){
   report_date_range <- paste0(add_ordinal_suffix(as.numeric(format(start_date, "%d")))," ", format(start_date, "%b"), " - ", add_ordinal_suffix(as.numeric(format(end_date, "%d")))," ", format(end_date, "%b"),", ",format(end_date, "%Y"))
 }
 
-```
-
-```{r header_table, echo=FALSE}
 header_data <- data.frame(
-  Week = c(paste("Week", params$epiweek), ""),
-  Title = c("Epidemiological Bulletin", ""),
-  DateRange = c(report_date_range, "")
+  Week = c(paste("Week", params$epiweek)),
+  Title = c("Epidemiological Bulletin"),
+  DateRange = c(report_date_range)
 )
 
 flextable(header_data) %>%
   set_table_properties(layout = "fixed") %>%  # Use fixed layout for precise column control
-  width(j = 1, width = 2) %>%  # Set left column width
-  width(j = 2, width = 3.5) %>%  # Set middle column wider for centering
-  width(j = 3, width = 2) %>%  # Set right column width
+  width(j = 1, width = 2.5) %>%  # Set left column width
+  width(j = 2, width = 2.5) %>%  # Set middle column wider for centering
+  width(j = 3, width = 2.5) %>%  # Set right column width
   bg(i = 1, j = 1:3, bg = "#135c2c") %>%  # Dark Green Background for first row
   color(i = 1, j = 1:3, color = "white") %>%  # White Text in first row
   bold(i = 1, j = 1:3) %>%
+  fontsize(i = 1, j = 1:3, size = 14) %>%  # Adjust text size
   align(i = 1, j = 1, align = "left") %>%
   align(i = 1, j = 2, align = "center") %>%  # Center Title in its cell
   align(i = 1, j = 3, align = "right") %>%
@@ -61,37 +127,161 @@ flextable(header_data) %>%
 
 ```{r sub_header1, echo=FALSE}
 sub_header_data <- data.frame(
-  Title = "Summary"
+  Title = c("", "Summary")
   )
 
 flextable(sub_header_data) %>%
   set_table_properties(layout = "fixed") %>%  
   width(j=1, width=7.5) %>%
-  bg(i = 1, j = 1, bg = "#92d050") %>%  # Light Green Background
-  color(i = 1, j = 1, color = "black") %>%  # Black Text
-  bold(i = 1, j = 1) %>%
-  align(i = 1, j = 1, align = "center") %>%
+  height(i = 1, height = 0.01) %>%  # Reduce height of first row
+  bg(i = 2, j = 1, bg = "#92d050") %>%  # Light Green Background
+  color(i = 2, j = 1, color = "black") %>%  # Black Text
+  bold(i = 2, j = 1) %>%
+  fontsize(i = 2, j = 1, size = 14) %>%  # Adjust text size
+  align(i = 2, j = 1, align = "center") %>%
   border_remove() %>%
   delete_part(part = "header")
 
+```
+
+```{r weekly_notifiable_diseases}
+this_week_data_by_province <- weekly_data_by_province_clean %>%
+  filter(year == params$year & period2 == params$epiweek) %>%
+  group_by(org_unit_name, disease) %>%
+  summarise_at(c("Suspected", "Tested", "Confirmed"), ~sum(., na.rm=T)) %>%
+  ungroup() %>%
+  mutate(province = str_sub(str_remove_all(org_unit_name, " Province"),4)) %>%
+  select(province, disease, Suspected) %>%
+  filter(Suspected > 0) %>%
+  arrange(disease, province)
+
+cumulative_weekly_data <- weekly_data_by_province_clean %>%
+  filter(year == params$year & period2 <= params$epiweek) %>%
+  group_by(disease) %>%
+  summarise_at(c("Suspected", "Tested", "Confirmed"), ~sum(., na.rm=T))
+
+this_week_data <- weekly_data_by_province_clean %>%
+  filter(year == params$year & period2 == params$epiweek) %>%
+  group_by(disease) %>%
+  summarise_at(c("Suspected", "Tested", "Confirmed"), ~sum(., na.rm=T)) 
+
+weekly_data_summary_table <- this_week_data %>%
+  full_join(cumulative_weekly_data, by=c("disease")) %>%
+  rename_with(
+    ~ c(
+      "Disease/Event/Condition",
+      paste0("Suspected_Week_", params$epiweek),
+      paste0("Tested_Week_", params$epiweek),
+      paste0("Confirmed_Week_", params$epiweek),
+      "Suspected_Cumulative",
+      "Tested_Cumulative",
+      "Confirmed_Cumulative"
+    ),
+    .cols = c(disease, Suspected.x, Tested.x, Confirmed.x, Suspected.y, Tested.y, Confirmed.y)
+  ) %>%
+  mutate(across(-`Disease/Event/Condition`, ~ format(., big.mark = ",")))
+
+# Construct Sentences
+summary_sentences <- this_week_data_by_province %>%
+  group_by(disease) %>%
+  summarise(
+    total_cases = sum(Suspected),
+    locations = paste0(province, "(", Suspected, ")", collapse = ", "),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    sentence = glue::glue("{total_cases} suspected cases were reported from {locations} province{ifelse(grepl(',', locations), 's', '')}.")
+  ) %>%
+  pull(sentence)
+
+summary_sentences <- setNames(as.list(summary_sentences), this_week_data_by_province %>% group_by(disease) %>% summarise(disease=first(disease)) %>% pull(disease))
 ```
 
 **Immediately Notifiable Diseases and Events**
 
-  - **AFP** :
-  - **Anthrax** :
-  - **Cholera** :
-  - **Measles** :
+  - **AFP** : `r summary_sentences["AFP"]`
+  - **Anthrax** : `r summary_sentences["Anthrax"]`
+  - **Cholera** : `r summary_sentences["Cholera"]`
+  - **Measles** : `r summary_sentences["Measles"]`
   
 **Other Diseases and Events**
 
-  - **Non-bloody Diarrhoea** :
-  - **Malaria** :
-  - **Typhoid Fever** :
+  - **Non-bloody Diarrhoea** : `r summary_sentences["Non-bloody Diarrhoea"]`
+  - **Malaria** : `r summary_sentences["Malaria"]`
+  - **Typhoid Fever** : `r summary_sentences["Typhoid Fever"]`
   
 ```{r sub_header2, echo=FALSE}
 sub_header_data <- data.frame(
-  Title = "Summary Report Priority Diseases, Conditions, and Events"
+  Title = c("", "Summary Report Priority Diseases, Conditions, and Events")
+  )
+
+flextable(sub_header_data) %>%
+  set_table_properties(layout = "fixed") %>%  
+  width(j=1, width=7.5) %>%
+  height(i = 1, height = 0.05) %>%  # Reduce height of first row
+  bg(i = 2, j = 1, bg = "#92d050") %>%  # Light Green Background
+  color(i = 2, j = 1, color = "black") %>%  # Black Text
+  bold(i = 2, j = 1) %>%
+  fontsize(i = 2, j = 1, size = 14) %>%  # Adjust text size
+  align(i = 2, j = 1, align = "center") %>%
+  border_remove() %>%
+  delete_part(part = "header")
+
+```
+
+```{r weekly_notifiable_summary_table}
+# Store original column names
+original_colnames <- names(weekly_data_summary_table)
+
+# Generate second-row header labels
+second_row_headers <- original_colnames %>%
+  str_replace_all("_Week_\\d+", "") %>%   # Remove "Week_XX"
+  str_replace_all("_Cumulative", "")      # Remove "Cumulative"
+
+# Rename columns uniquely to avoid duplication in flextable
+colnames(weekly_data_summary_table) <- c(
+  "Disease/Event/Condition",
+  "Suspected_Week", "Tested_Week", "Confirmed_Week",
+  "Suspected_Cum", "Tested_Cum", "Confirmed_Cum"
+)
+
+# Create Flextable with Two Header Rows
+table1 <- flextable(weekly_data_summary_table) %>%
+  theme_box() %>%
+  set_table_properties(width = 1, layout = "autofit") %>%
+  
+  # First row: Merge "Week X" and "Cumulative Total"
+  add_header_row(
+    values = c(" ", paste0("Week ", params$epiweek), paste0("Week 1 to ", params$epiweek, ", Cumulative Total")),
+    colwidths = c(1, 3, 3)
+  ) %>%
+  
+  # Second row: Rename based on cleaned labels
+  set_header_labels(
+    `Suspected_Week` = "Suspected",
+    `Tested_Week` = "Tested",
+    `Confirmed_Week` = "Confirmed",
+    `Suspected_Cum` = "Suspected",
+    `Tested_Cum` = "Tested",
+    `Confirmed_Cum` = "Confirmed"
+  ) %>%
+  
+  # Style the table
+  bold(part = "header") %>%
+  align(align = "center", part = "all") %>%
+  bg(part = "header", bg = "#f79646") %>%
+  fontsize(size = 10, part = "all") %>%
+  autofit()
+
+table1
+
+```
+
+\pagebreak
+
+```{r sub_header3, echo=FALSE}
+sub_header_data <- data.frame(
+  Title = c("Summary of VPD Surveillance Indicators")
   )
 
 flextable(sub_header_data) %>%
@@ -100,30 +290,27 @@ flextable(sub_header_data) %>%
   bg(i = 1, j = 1, bg = "#92d050") %>%  # Light Green Background
   color(i = 1, j = 1, color = "black") %>%  # Black Text
   bold(i = 1, j = 1) %>%
+  fontsize(i = 1, j = 1, size = 14) %>%  # Adjust text size
   align(i = 1, j = 1, align = "center") %>%
   border_remove() %>%
   delete_part(part = "header")
 
 ```
 
-**Table goes here**
-
-```{r page_break, results="asis", echo=FALSE}
-cat("<w:p><w:r><w:br w:type='page'/></w:r></w:p>")
-```
-
-```{r sub_header3, echo=FALSE}
+```{r sub_header4, echo=FALSE}
 sub_header_data <- data.frame(
-  Title = "Summary of VPD Surveillance Indicators"
+  Title = c("", "Measles Laboratory Test Results by Province")
   )
 
 flextable(sub_header_data) %>%
   set_table_properties(layout = "fixed") %>%  
   width(j=1, width=7.5) %>%
-  bg(i = 1, j = 1, bg = "#92d050") %>%  # Light Green Background
-  color(i = 1, j = 1, color = "black") %>%  # Black Text
-  bold(i = 1, j = 1) %>%
-  align(i = 1, j = 1, align = "center") %>%
+  height(i = 1, height = 0.05) %>%  # Reduce height of first row
+  bg(i = 2, j = 1, bg = "#f79646") %>%  # Light Green Background
+  color(i = 2, j = 1, color = "white") %>%  # Black Text
+  bold(i = 2, j = 1) %>%
+  fontsize(i = 2, j = 1, size = 12) %>%  # Adjust text size
+  align(i = 2, j = 1, align = "center") %>%
   border_remove() %>%
   delete_part(part = "header")
 
@@ -133,18 +320,20 @@ flextable(sub_header_data) %>%
   - From the X measles specimen that have been tested, X have been confirmed positive (PR X.X %)
   -
 
-```{r sub_header4, echo=FALSE}
+```{r sub_header5, echo=FALSE}
 sub_header_data <- data.frame(
-  Title = "Maternal Deaths"
+  Title = c("", "Maternal Deaths")
   )
 
 flextable(sub_header_data) %>%
   set_table_properties(layout = "fixed") %>%  
   width(j=1, width=7.5) %>%
-  bg(i = 1, j = 1, bg = "#92d050") %>%  # Light Green Background
-  color(i = 1, j = 1, color = "black") %>%  # Black Text
-  bold(i = 1, j = 1) %>%
-  align(i = 1, j = 1, align = "center") %>%
+  height(i = 1, height = 0.05) %>%  # Reduce height of first row
+  bg(i = 2, j = 1, bg = "#92d050") %>%  # Light Green Background
+  color(i = 2, j = 1, color = "black") %>%  # Black Text
+  bold(i = 2, j = 1) %>%
+  fontsize(i = 2, j = 1, size = 14) %>%  # Adjust text size
+  align(i = 2, j = 1, align = "center") %>%
   border_remove() %>%
   delete_part(part = "header")
 
