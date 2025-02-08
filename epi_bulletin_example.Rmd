@@ -11,31 +11,30 @@ params:
 ```{r setup, include=FALSE, echo=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
-pacman::p_load(knitr,
-               tidyverse,
-               ggplot2,
-               rio,
-               here,
-               kableExtra,
-               grid,
-               gridExtra, 
-               flextable,
-               sf,
-               glue, 
-               officer,
-               cowplot)
+#Load packages:
+pacman::p_load(knitr,        #For Markdown
+               tidyverse,    #For data cleaning
+               ggplot2,      #For plots and maps
+               rio,          #For importing data
+               grid,         #For table formatting
+               gridExtra,    #For table formatting
+               flextable,    #For table formatting
+               sf,           #For maps
+               glue,         #For text formatting
+               officer,      #For rendering formats in Word
+               cowplot)      #For combining multiple plots/tables
 
 #Load functions: 
 source("code/funcs.R")
 
 #Load Data:
-maternal_deaths_linelist <- rio::import("data/Maternal deaths.xlsx", which="MD linelist")
-maternal_deaths_summary <- rio::import("data/Maternal deaths.xlsx", which="MD summary")
-weekly_data_by_province <- rio::import("data/weekly_data_by_province.csv")
-province_shapes <- sf::read_sf("data/shapefiles/zmb_admbnda_adm1_dmmu_20201124.shp")
+maternal_deaths_linelist <- rio::import("data/Maternal deaths.xlsx", which="MD linelist")   #Maternal Deaths: File needs to be replaced for report week
+maternal_deaths_summary <- rio::import("data/Maternal deaths.xlsx", which="MD summary")     #Maternal Deaths: File needs to be replaced for report week
+weekly_data_by_province <- rio::import("data/weekly_data_by_province.csv")                  #Weekly Data: Contains all weeks through current week
+province_shapes <- sf::read_sf("data/shapefiles/zmb_admbnda_adm1_dmmu_20201124.shp")        #Province shapefile for maps
 
 ## Measles Lab data has dates stored as numeric dates in excel - but with a mix of formats (m/d/y and d/m/y). Manually convert it to csv first then read into R to get the text values instead of Excel date values.
-measles_lab <- rio::import("data/measles_lab.csv")
+measles_lab <- rio::import("data/measles_lab.csv")                                          #Measles lab results: contains all data through current week
 
 #Get the start and end dates from the epiweek and year parameters
 start_date <- as.Date(paste(params$year, params$epiweek-1, 1, sep = "-"), format = "%Y-%U-%u") #Lag week by 1 to get the date range of the report
