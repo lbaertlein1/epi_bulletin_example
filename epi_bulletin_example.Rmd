@@ -4,8 +4,8 @@ output:
     reference_docx: template.docx
 fontsize: 10pt
 params:
-  epiweek: 34
-  year: 2024 
+  epiweek: 34 # Edit the Week Number for the report here
+  year: 2024  # Edit the Year of the report here
 ---
 
 ```{r setup, include=FALSE, echo=FALSE}
@@ -31,21 +31,30 @@ source("code/funcs.R")
 #Load Data:
 maternal_deaths_linelist <- rio::import("data/Maternal deaths.xlsx", which="MD linelist")
 maternal_deaths_summary <- rio::import("data/Maternal deaths.xlsx", which="MD summary")
-measles_lab <- rio::import("data/measles_lab.xlsx", which="Sheet1")
 weekly_data_by_province <- rio::import("data/weekly_data_by_province.csv")
 province_shapes <- sf::read_sf("data/shapefiles/zmb_admbnda_adm1_dmmu_20201124.shp")
+
+## Measles Lab data has dates stored as numeric dates in excel - but with a mix of formats (m/d/y and d/m/y). Manually convert it to csv first then read into R to get the text values instead of Excel date values.
+measles_lab <- rio::import("data/measles_lab.csv")
+
+#Get the start and end dates from the epiweek and year parameters
+start_date <- as.Date(paste(params$year, params$epiweek-1, 1, sep = "-"), format = "%Y-%U-%u") #Lag week by 1 to get the date range of the report
+end_date <- start_date + 6 
 
 #Basic data tidying
 maternal_deaths_linelist_clean <- maternal_deaths_linelist %>%
   janitor::clean_names() %>%
   #Clean date formats
-  mutate_at(c("date_of_death", "date_of_notification"),  ~suppressWarnings(case_when(!is.na(as.Date(as.numeric(.), origin="1899-12-30")) ~ as.Date(as.numeric(.), origin="1899-12-30"),
+  mutate_at(c("date_of_death"),  ~suppressWarnings(case_when(!is.na(as.Date(as.numeric(.), origin="1899-12-30")) ~ as.Date(as.numeric(.), origin="1899-12-30"),
                                     TRUE ~ parse_date_time(., orders=c("dmy", "mdy"))))) %>%
- mutate(age = as.numeric(age)) %>% #Convert age to numeric
+  mutate_at(c("date_of_notification"),  ~suppressWarnings(case_when(!is.na(as.numeric(.)) ~ as.Date(., "%d/%m/%Y"),
+                                    TRUE ~ parse_date_time(., orders=c("dmy", "mdy"))))) %>%
+  mutate(age = as.numeric(age)) %>% #Convert age to numeric
   mutate_at(c("primary_cause_of_death", "short_name", "province"), ~stringr::str_to_sentence(tolower(.))) %>% #format text strings for consistency
   mutate(short_name = case_when(short_name == "Non-obstetric complication" ~ "Non-obstetric complications",
                                 short_name == "Obstetric hemorrhage" ~ "Obstetric haemorrhage",
                                 TRUE ~ short_name)) 
+  
 
 maternal_deaths_summary_clean <- maternal_deaths_summary %>%
   janitor::clean_names() %>%
@@ -60,8 +69,14 @@ maternal_deaths_summary_clean <- maternal_deaths_summary %>%
 
 measles_lab_clean <- measles_lab %>%
   janitor::clean_names() %>%
-  mutate_at(c("date_of_onset", "date_blood_specimen_collected", "date_specimen_received_in_lab"),  ~suppressWarnings(case_when(!is.na(as.Date(as.numeric(.), origin="1899-12-30")) ~ as.Date(as.numeric(.), origin="1899-12-30"),
-                                    TRUE ~ parse_date_time(., orders=c("dmy", "mdy"))))) %>%
+  mutate_at(
+    c("date_of_onset", "date_blood_specimen_collected", "date_specimen_received_in_lab"), 
+    ~ suppressWarnings(case_when(
+      grepl("^\\d{2}-\\d{2}-\\d{4}$", .) ~ as.Date(., format = "%d-%m-%Y"),  # Convert if in "dd-mm-yyyy" format
+      !is.na(as.numeric(.)) ~ as.Date(as.numeric(.), origin = "1899-12-30"),  # Convert numeric to Excel date
+      TRUE ~ parse_date_time(., orders = c("dmy", "mdy"))  # Try other common date formats
+    ))
+  ) %>%
   mutate_at(c("ig_m_results", "rubella_ig_m"), ~case_when(. == 1 ~ "Positive",
                                                           . == 2 ~ "Negative",
                                                           . == 3 ~ "Indeterminate",
@@ -71,8 +86,8 @@ measles_lab_clean <- measles_lab %>%
                                                           TRUE ~ "Unknown")) %>%
   mutate_at(c("ig_m_results", "rubella_ig_m"), ~factor(., levels=c("Unknown", "Indeterminate", "Negative", "Not done", "Pending", "Positive"))) %>%
   arrange(province_of_residence, ig_m_results) %>%
-  select(province_of_residence, ig_m_results)
-
+  select(-c("v9", "v10", "v11", "v12"))
+ 
 weekly_data_by_province_clean <- weekly_data_by_province %>%
   janitor::clean_names() %>%
   pivot_longer(cols=-c("org_unit_name", "period")) %>%
@@ -93,12 +108,20 @@ mutate(disease = case_when(disease == "afp" ~ "AFP",
     period2 = lubridate::epiweek(as.Date(ISOdate(year, 1, 1)) + weeks(week - 1))
   )
 
+#Subset all data to weeks 1 through report week, where data allows
+maternal_deaths_linelist_clean <- maternal_deaths_linelist_clean %>%
+  filter(date_of_notification >= start_date) %>% #Filter to date_of_notification on or after the report start_date
+  filter(date_of_notification <= end_date) #Filter to date_of_notification on or before the report end_date
+
+measles_lab_clean <- measles_lab_clean %>%
+  filter(date_specimen_received_in_lab <= end_date) #Filter to date_specimen_received_in_lab on or before the report end_date
+
+weekly_data_by_province_clean <- weekly_data_by_province_clean %>%
+  filter(year == params$year & week <= params$epiweek) #Filter to weeks on or before report week, within report year
+
 ```
 
 ```{r header_table, echo=FALSE}
-#Get the start and end dates from the epiweek and year parameters
-start_date <- as.Date(paste(params$year, params$epiweek-1, 1, sep = "-"), format = "%Y-%U-%u") #Lag week by 1 to get the date range of the report
-end_date <- start_date + 6 
 
 #Format the date for the report header. 
 ## If start and end dates are in the same month, then display as "Xth - Ynd, Month, Year".
