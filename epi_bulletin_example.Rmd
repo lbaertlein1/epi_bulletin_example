@@ -84,6 +84,7 @@ mutate(disease = str_remove_all(name, c("_confirmed|_sent_to_lab|_suspected"))) 
 mutate(disease = case_when(disease == "afp" ~ "AFP",
                            disease %in% c("diarrhoea_non_bloody", "diarrhoea_non_bloodyed") ~ "Non-bloody Diarrhoea",
                            TRUE ~ str_to_title(str_replace_all(disease, "_", " ")))) %>%
+  mutate(disease = factor(disease, levels=c("AFP", "Anthrax", "Cholera", "Non-bloody Diarrhoea", "Malaria", "Measles", "Monkeypox", "Plague", "Typhoid Fever"))) %>%
   select(-c("name")) %>%
   pivot_wider(names_from = c("category"), values_from = c("value"), values_fill=0) %>%
   mutate(
@@ -133,22 +134,7 @@ flextable(header_data) %>%
 ```
 
 ```{r sub_header1, echo=FALSE}
-sub_header_data <- data.frame(
-  Title = c("", "Summary")
-  )
-
-flextable(sub_header_data) %>%
-  set_table_properties(layout = "fixed") %>%  
-  width(j=1, width=7.5) %>%
-  height(i = 1, height = 0.01) %>%  # Reduce height of first row
-  bg(i = 2, j = 1, bg = "#92d050") %>%  # Light Green Background
-  color(i = 2, j = 1, color = "black") %>%  # Black Text
-  bold(i = 2, j = 1) %>%
-  fontsize(i = 2, j = 1, size = 14) %>%  # Adjust text size
-  align(i = 2, j = 1, align = "center") %>%
-  border_remove() %>%
-  delete_part(part = "header")
-
+sub_heading("Summary", level=1)
 ```
 
 ```{r weekly_notifiable_diseases}
@@ -217,23 +203,10 @@ summary_sentences <- setNames(as.list(summary_sentences), this_week_data_by_prov
   - **Malaria** : `r summary_sentences["Malaria"]`
   - **Typhoid Fever** : `r summary_sentences["Typhoid Fever"]`
   
+  
+  
 ```{r sub_header2, echo=FALSE}
-sub_header_data <- data.frame(
-  Title = c("", "Summary Report Priority Diseases, Conditions, and Events")
-  )
-
-flextable(sub_header_data) %>%
-  set_table_properties(layout = "fixed") %>%  
-  width(j=1, width=7.5) %>%
-  height(i = 1, height = 0.05) %>%  # Reduce height of first row
-  bg(i = 2, j = 1, bg = "#92d050") %>%  # Light Green Background
-  color(i = 2, j = 1, color = "black") %>%  # Black Text
-  bold(i = 2, j = 1) %>%
-  fontsize(i = 2, j = 1, size = 14) %>%  # Adjust text size
-  align(i = 2, j = 1, align = "center") %>%
-  border_remove() %>%
-  delete_part(part = "header")
-
+sub_heading("Summary Report Priority Diseases, Conditions and Events", level=1)
 ```
 
 ```{r weekly_notifiable_summary_table}
@@ -292,43 +265,14 @@ table1
 \pagebreak
 
 ```{r sub_header3, echo=FALSE}
-sub_header_data <- data.frame(
-  Title = c("Summary of VPD Surveillance Indicators")
-  )
-
-flextable(sub_header_data) %>%
-  set_table_properties(layout = "fixed") %>%  
-  width(j=1, width=7.5) %>%
-  bg(i = 1, j = 1, bg = "#92d050") %>%  # Light Green Background
-  color(i = 1, j = 1, color = "black") %>%  # Black Text
-  bold(i = 1, j = 1) %>%
-  fontsize(i = 1, j = 1, size = 14) %>%  # Adjust text size
-  align(i = 1, j = 1, align = "center") %>%
-  border_remove() %>%
-  delete_part(part = "header")
-
+sub_heading("Summary of VPD Surveillance Indicators", level=1, top_row_gap=0)
 ```
 
 ```{r sub_header4, echo=FALSE}
-sub_header_data <- data.frame(
-  Title = c("", "Measles Laboratory Test Results by Province")
-  )
-
-flextable(sub_header_data) %>%
-  set_table_properties(layout = "fixed") %>%  
-  width(j=1, width=7.5) %>%
-  height(i = 1, height = 0.05) %>%  # Reduce height of first row
-  bg(i = 2, j = 1, bg = "#f79646") %>%  # Light Green Background
-  color(i = 2, j = 1, color = "white") %>%  # Black Text
-  bold(i = 2, j = 1) %>%
-  fontsize(i = 2, j = 1, size = 12) %>%  # Adjust text size
-  align(i = 2, j = 1, align = "center") %>%
-  border_remove() %>%
-  delete_part(part = "header")
-
+sub_heading("Measles Laboratory Test Results by Province", level=2, top_row_gap=0)
 ```
 
-```{r measles_plot, fig.width=7.5, fig.height=2.5, out.width="100%", out.height="100%"}
+```{r measles_plot, fig.width=7.5, fig.height=3.2, out.width="100%", out.height="100%"}
 measles_lab_summary <- measles_lab_clean %>%
   group_by(province_of_residence, ig_m_results) %>%
   summarise(total = n()) %>%
@@ -346,10 +290,10 @@ measles_plot <- ggplot(data=measles_lab_summary) +
   theme(legend.title = element_blank(),
         axis.title.x = element_blank(),
         axis.title.y = element_blank(),
-        axis.text.x = element_text(angle=90, hjust=1),
+        axis.text.x = element_text(angle=90, hjust=0.5, vjust=0.5, margin = margin(t = 12)),
         panel.grid.major = element_line(color="grey90", linetype="dashed"),
-        plot.margin = margin(30, 10, 30, 10),
-         text = element_text(family = "Arial", size = 10))  # Set font for plot)
+        plot.margin = margin(25, 10, 25, 10),
+        text = element_text(family = "Arial", size = 10))  # Set font for plot)
 
 # Create a Single-Cell TableGrob with Text
 measles_bullet1 <- paste0("The country has recorded a total of ", sum(as.numeric(cumulative_weekly_data$Suspected[cumulative_weekly_data$disease == "Measles"]), na.rm=T), " suspected measles cases in ", params$year,".\n")
@@ -371,43 +315,34 @@ cowplot::plot_grid(text_grob, measles_plot, align="h", nrow=1, rel_widths = c(4.
 ```
 
 ```{r sub_header5, echo=FALSE}
-sub_header_data <- data.frame(
-  Title = c("", "Maternal Deaths")
-  )
-
-flextable(sub_header_data) %>%
-  set_table_properties(layout = "fixed") %>%  
-  width(j=1, width=7.5) %>%
-  height(i = 1, height = 0.05) %>%  # Reduce height of first row
-  bg(i = 2, j = 1, bg = "#92d050") %>%  # Light Green Background
-  color(i = 2, j = 1, color = "black") %>%  # Black Text
-  bold(i = 2, j = 1) %>%
-  fontsize(i = 2, j = 1, size = 14) %>%  # Adjust text size
-  align(i = 2, j = 1, align = "center") %>%
-  border_remove() %>%
-  delete_part(part = "header")
-
+sub_heading("Maternal Deaths", level=1)
 ```
 
 ```{r maternal_deaths_subheader}
 sub_header_data <- data.frame(
   Col1 = c("",  
-           paste0("Causes of maternal death (Week ", params$epiweek, ", n=", length(unique(maternal_deaths_linelist_clean$case_id)), ")")
+           paste0("Causes of maternal death (Week ", params$epiweek, ", n=", length(unique(maternal_deaths_linelist_clean$case_id)), ")"),
+           ""
   ),
   Col2 = c("",
-           paste0("Cumulative distribution of maternal deaths (", params$year, ") by province"))  
+           paste0("Cumulative distribution of maternal deaths (", params$year, ") by province"),
+           "")
 )
 
 flextable(sub_header_data) %>%
   set_table_properties(layout = "fixed") %>%  
   width(j = 1:2, width = 3.75) %>%  # Each column gets half of 7.5 inches
-  height(i = 1, height = 0.05) %>%  # Reduce height of first row
   bg(i = 2, j = 1:2, bg = "#f79646") %>%  # Light orange background for second row
   color(i = 2, j = 1:2, color = "white") %>%  # White text
   border(border = officer::fp_border(color="white"), part="all") %>%
   bold(i = 2, j = 1:2) %>%
-  fontsize(i = 2, j = 1:2, size = 12) %>%  # Adjust text size
+  fontsize(i = 2, j = 1:2, size = 10) %>%  # Adjust text size
+  fontsize(i = 1, j = 1:2, size = 4) %>%  # Adjust the size of the top gap row
+  fontsize(i = 3, j = 1:2, size = 4) %>%  # Adjust the size of the bottom gap row
   align(i = 2, j = 1:2, align = "center") %>%
+  padding(i = 1, j = 1:2, padding.top = 0, padding.bottom = 0, padding.left = 0, padding.right = 0) %>%  # Adjust padding for top buffer row
+  padding(i = 2, j = 1:2, padding.top = 4, padding.bottom = 4, padding.left = 0, padding.right = 0) %>%  # Adjust padding for text row
+  padding(i = 3, j = 1:2, padding.top = 0, padding.bottom = 0, padding.left = 0, padding.right = 0) %>%  # Adjust padding for bottom buffer row
   delete_part(part = "header")  # Remove column headers
 ```
 
@@ -426,15 +361,17 @@ maternal_death_plot <- ggplot(data = maternal_deaths_plot_data,
        aes(x=short_name, y=total)) +
   geom_col(fill="#65adc2") +
   geom_text(aes(label = scales::percent(pct, accuracy = 1)), 
-            position = position_nudge(y = max(maternal_deaths_plot_data$total) * 0.04),  # Nudge labels outside
+            position = position_nudge(y = max(maternal_deaths_plot_data$total) * 0.03),  # Nudge labels outside
             hjust = 0,  # Align text left (outside the bars)
             size = 2.5) +  # Adjust text size for better readability
   theme_classic() +
   coord_flip() +
   labs(y="# of maternal deaths") +
-  theme(axis.title.y=element_blank(),
+  theme(axis.text.y=element_text(size=8),
+        axis.title.x=element_text(size=8),
+        axis.title.y=element_blank(),
         panel.grid.major = element_line(color="grey90", linetype="dashed")) +
-  scale_y_continuous(limits=c(0, max(maternal_deaths_plot_data$total, na.rm=T)+0.5))
+  scale_y_continuous(limits=c(0, max(maternal_deaths_plot_data$total, na.rm=T)+0.8))
 
 ```
 
@@ -455,21 +392,28 @@ maternal_death_map <-ggplot(data = map_data) +
     legend.position = c(0.05, 0.95),  # Move legend to top-left (inside)
     legend.justification = c(0, 1),  # Align legend's top-left corner
     legend.background = element_rect(fill = alpha("white", 0), color = NA),  
-    legend.key.height = unit(0.15, "in"),  # Reduce legend height
-    legend.key.width = unit(0.1, "in"),  # Make legend narrower
+    legend.key.height = unit(0.25, "in"),  # Reduce legend height
+    legend.key.width = unit(0.2, "in"),  # Make legend narrower
     legend.text = element_text(size = 7),  # Reduce text size of legend values
     legend.title = element_text(size = 7),  # Reduce text size of legend title
-    plot.margin = margin(10, 10, 10, 10) 
+    plot.margin = margin(0, 0, 0, 0) #Remove all margins
   ) +
   labs(fill="Cumulative Maternal Deaths")
 
 ```
 
-```{r maternal_deaths_plot_grid, fig.width=7.5, fig.height=3, out.width="100%", out.height="100%"}
-cowplot::plot_grid(maternal_death_plot, maternal_death_map, align="h", nrow=1, rel_widths = c(4, 4.5))
+```{r maternal_deaths_plot_grid, fig.width=7.5, fig.height=3.5, out.width="100%", out.height="100%"}
+cowplot::plot_grid(
+  cowplot::plot_grid(maternal_death_plot, ncol = 1),  # Bar chart
+  maternal_death_map,  # Map
+  align = "h",
+  nrow = 1,
+  rel_widths = c(4, 4.5),  # Adjust widths
+  scale = c(0.9, 1)  # Scale the bar chart to be slightly shorter
+)
 ```
-  
-- The bar chart on the left summarizes the causes of deaths of `r length(unique(maternal_deaths_linelist_clean$case_id))` maternal deaths recorded in week `r params$epiweek`.
-- Hypertensive disorder, Non-obstetric complications, and Obstetric haemorrhage continue to be the leading causes of maternal deaths this year. 
-- Cumulatively, in `r params$year`, `r sum(maternal_deaths_summary_clean$cumulative_deaths, na.rm=T)` maternal deaths have been recorded across the country, as depicted on the map.
-- Provinces with darker shades (`r maternal_deaths_summary_clean$province[1]`, `r maternal_deaths_summary_clean$province[2]`, and `r maternal_deaths_summary_clean$province[3]`) indicate those with a higher number of reported maternal deaths.
+    
+  - The bar chart on the left summarizes the causes of deaths of `r length(unique(maternal_deaths_linelist_clean$case_id))` maternal deaths recorded in week `r params$epiweek`.
+  - Hypertensive disorder, Non-obstetric complications, and Obstetric haemorrhage continue to be the leading causes of maternal deaths this year.
+  - Cumulatively, in `r params$year`, `r sum(maternal_deaths_summary_clean$cumulative_deaths, na.rm=T)` maternal deaths have been recorded across the country, as depicted on the map.
+  - Provinces with darker shades (`r maternal_deaths_summary_clean$province[1]`, `r maternal_deaths_summary_clean$province[2]`, and `r maternal_deaths_summary_clean$province[3]`) indicate those with a higher number of reported maternal deaths.
