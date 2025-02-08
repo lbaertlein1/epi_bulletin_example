@@ -77,7 +77,7 @@ measles_lab_clean <- measles_lab %>%
       TRUE ~ parse_date_time(., orders = c("dmy", "mdy"))  # Try other common date formats
     ))
   ) %>%
-  mutate_at(c("ig_m_results", "rubella_ig_m"), ~case_when(. == 1 ~ "Positive",
+  mutate_at(c("ig_m_results", "rubella_ig_m"), ~case_when(. == 1 ~ "Positive",   #Recode the results using the code shown in the Excel file
                                                           . == 2 ~ "Negative",
                                                           . == 3 ~ "Indeterminate",
                                                           . == 4 ~ "Not done",
@@ -161,6 +161,7 @@ sub_heading("Summary", level=1)
 ```
 
 ```{r weekly_notifiable_diseases}
+#Totals for this week, by province:
 this_week_data_by_province <- weekly_data_by_province_clean %>%
   filter(year == params$year & period2 == params$epiweek) %>%
   group_by(org_unit_name, disease) %>%
@@ -171,16 +172,18 @@ this_week_data_by_province <- weekly_data_by_province_clean %>%
   filter(Suspected > 0) %>%
   arrange(disease, province)
 
+#Cumulative Totals by disease
 cumulative_weekly_data <- weekly_data_by_province_clean %>%
-  filter(year == params$year & period2 <= params$epiweek) %>%
   group_by(disease) %>%
   summarise_at(c("Suspected", "Tested", "Confirmed"), ~sum(., na.rm=T))
 
+#Totals for this week, by disesase:
 this_week_data <- weekly_data_by_province_clean %>%
   filter(year == params$year & period2 == params$epiweek) %>%
   group_by(disease) %>%
   summarise_at(c("Suspected", "Tested", "Confirmed"), ~sum(., na.rm=T)) 
 
+#Combine this week and cumulative totals, by disease
 weekly_data_summary_table <- this_week_data %>%
   full_join(cumulative_weekly_data, by=c("disease")) %>%
   rename_with(
@@ -197,7 +200,7 @@ weekly_data_summary_table <- this_week_data %>%
   ) %>%
   mutate(across(-`Disease/Event/Condition`, ~ format(., big.mark = ",")))
 
-# Construct Sentences
+# Construct Sentences for Summary
 summary_sentences <- this_week_data_by_province %>%
   group_by(disease) %>%
   summarise(
@@ -296,11 +299,13 @@ sub_heading("Measles Laboratory Test Results by Province", level=2, top_row_gap=
 ```
 
 ```{r measles_plot, fig.width=7.5, fig.height=3.2, out.width="100%", out.height="100%"}
+#Summarise total samples by result and province
 measles_lab_summary <- measles_lab_clean %>%
   group_by(province_of_residence, ig_m_results) %>%
   summarise(total = n()) %>%
   ungroup() 
 
+#Create barchart of total samples by result and province
 measles_plot <- ggplot(data=measles_lab_summary) +
   geom_col(aes(x=province_of_residence, y=total, group=ig_m_results, fill=ig_m_results), position="stack") +
   scale_fill_manual(values=c("Positive" = "#ff0000",
@@ -318,7 +323,7 @@ measles_plot <- ggplot(data=measles_lab_summary) +
         plot.margin = margin(25, 10, 25, 10),
         text = element_text(family = "Arial", size = 10))  # Set font for plot)
 
-# Create a Single-Cell TableGrob with Text
+# Create a Single-Cell TableGrob with Text for side-by-side text and plot
 measles_bullet1 <- paste0("The country has recorded a total of ", sum(as.numeric(cumulative_weekly_data$Suspected[cumulative_weekly_data$disease == "Measles"]), na.rm=T), " suspected measles cases in ", params$year,".\n")
 measles_bullet2 <- paste0("From the ", sum(as.numeric(measles_lab_summary$total), na.rm=T), " measles specimen that have been tested, ", sum(as.numeric(measles_lab_summary$total[measles_lab_summary$ig_m_results=="Positive"]), na.rm=T), " have been confirmed positive (PR ", round(sum(as.numeric(measles_lab_summary$total[measles_lab_summary$ig_m_results=="Positive"]), na.rm=T)/sum(as.numeric(measles_lab_summary$total), na.rm=T),3)*100,"%)")
 
@@ -333,6 +338,7 @@ text_grob <- tableGrob(
   core = list(fg_params = list(fontsize = 10, fontfamily = "Arial", hjust=0, x=0))
 ))
 
+#Combine the text and plot
 cowplot::plot_grid(text_grob, measles_plot, align="h", nrow=1, rel_widths = c(4.5, 4))
 
 ```
@@ -370,6 +376,7 @@ flextable(sub_header_data) %>%
 ```
 
 ```{r maternal_deaths_plot}
+#Summarise maternal deaths this week by cause for barchart, and calculate pct of total deaths
 maternal_deaths_plot_data <-  maternal_deaths_linelist_clean %>%
   group_by(short_name) %>%
   summarise(total = n()) %>%
@@ -377,9 +384,11 @@ maternal_deaths_plot_data <-  maternal_deaths_linelist_clean %>%
   mutate(pct = total / sum(total, na.rm=T)) %>%
   arrange(pct)
 
+#Order the maternal deaths causes by pct
 maternal_deaths_plot_data <- maternal_deaths_plot_data %>%
   mutate(short_name = factor(short_name, levels=maternal_deaths_plot_data$short_name))
-  
+
+#Create maternal deaths barchart
 maternal_death_plot <- ggplot(data = maternal_deaths_plot_data,
        aes(x=short_name, y=total)) +
   geom_col(fill="#65adc2") +
@@ -399,6 +408,7 @@ maternal_death_plot <- ggplot(data = maternal_deaths_plot_data,
 ```
 
 ```{r maternal_deaths_map}
+#Combine maternal deaths by province with province shapefile
 map_data <- maternal_deaths_summary_clean %>%
   mutate(province = case_when(province == "North Western" ~ "North-Western",
                               TRUE ~ province)) %>%
@@ -406,6 +416,7 @@ map_data <- maternal_deaths_summary_clean %>%
   mutate(label = paste0(province, "(", cumulative_deaths,")")) %>%
   sf::st_as_sf()
 
+#Create maternal deaths map
 maternal_death_map <-ggplot(data = map_data) +
   geom_sf(aes(fill = cumulative_deaths)) +
   geom_sf_text(aes(label=label), size=3) +
@@ -426,6 +437,7 @@ maternal_death_map <-ggplot(data = map_data) +
 ```
 
 ```{r maternal_deaths_plot_grid, fig.width=7.5, fig.height=3.5, out.width="100%", out.height="100%"}
+#Combine maternal deaths barchart and map into one object
 cowplot::plot_grid(
   cowplot::plot_grid(maternal_death_plot, ncol = 1),  # Bar chart
   maternal_death_map,  # Map
