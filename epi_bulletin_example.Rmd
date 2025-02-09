@@ -24,7 +24,7 @@ pacman::p_load(knitr,        #For Markdown
                officer,      #For rendering formats in Word
                cowplot)      #For combining multiple plots/tables
 
-#Load functions: 
+#Load custom functions: 
 source("code/funcs.R")
 
 #Load Data:
@@ -32,10 +32,9 @@ maternal_deaths_linelist <- rio::import("data/Maternal deaths.xlsx", which="MD l
 maternal_deaths_summary <- rio::import("data/Maternal deaths.xlsx", which="MD summary")     #Maternal Deaths: File needs to be replaced for report week
 weekly_data_by_province <- rio::import("data/weekly_data_by_province.csv")                  #Weekly Data: Contains all weeks through current week
 province_shapes <- sf::read_sf("data/shapefiles/zmb_admbnda_adm1_dmmu_20201124.shp")        #Province shapefile for maps
-
-## Measles Lab data has dates stored as numeric dates in excel - but with a mix of formats (m/d/y and d/m/y). Manually convert it to csv first then read into R to get the text values instead of Excel date values.
 measles_lab <- rio::import("data/measles_lab.csv")                                          #Measles lab results: contains all data through current week
-
+  ## Note: Measles Lab data has dates stored as numeric dates in excel - but with a mix of formats (m/d/y and d/m/y). Manually convert it to csv first then read into R to get the text values instead of Excel date values.
+                                          
 #Get the start and end dates from the epiweek and year parameters
 start_date <- as.Date(paste(params$year, params$epiweek-1, 1, sep = "-"), format = "%Y-%U-%u") #Lag week by 1 to get the date range of the report
 end_date <- start_date + 6 
@@ -451,3 +450,5 @@ cowplot::plot_grid(
   - Hypertensive disorder, Non-obstetric complications, and Obstetric haemorrhage continue to be the leading causes of maternal deaths this year.
   - Cumulatively, in `r params$year`, `r sum(maternal_deaths_summary_clean$cumulative_deaths, na.rm=T)` maternal deaths have been recorded across the country, as depicted on the map.
   - Provinces with darker shades (`r maternal_deaths_summary_clean$province[1]`, `r maternal_deaths_summary_clean$province[2]`, and `r maternal_deaths_summary_clean$province[3]`) indicate those with a higher number of reported maternal deaths.
+
+<!-- Note: the above leading causes of death for the year, in the second bullet, were not available in the provided data. Adjustment may be needed once the full annual maternal death data by disease is available -->
