@@ -84,7 +84,7 @@ measles_lab_clean <- measles_lab %>%
                                                           TRUE ~ "Unknown")) %>%
   mutate_at(c("ig_m_results", "rubella_ig_m"), ~factor(., levels=c("Unknown", "Indeterminate", "Negative", "Not done", "Pending", "Positive"))) %>%
   arrange(province_of_residence, ig_m_results) %>%
-  select(-c("v9", "v10", "v11", "v12"))
+  select(-c("x9"))
  
 weekly_data_by_province_clean <- weekly_data_by_province %>%
   janitor::clean_names() %>%
