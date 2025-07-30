@@ -1,0 +1,1 @@
+This RMD script was developed as an exercise. The example bulletin in the 'guidance' folder was provided, along with the datasets in the 'data' folder. The objective of the RMD was to re-create the bulletin as closely as possible while parameterizing it for use in subsequent weeks.
